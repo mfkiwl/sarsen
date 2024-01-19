@@ -26,12 +26,22 @@ def open_dem_raster(dem_urlpath: str, **kwargs: Any) -> xr.DataArray:
 
 def make_nd_dataarray(das: list[xr.DataArray], dim: str = "axis") -> xr.DataArray:
     da_nd = xr.concat(das, dim=dim, coords="minimal")
+    if da_nd.chunks is not None:
+        da_nd = da_nd.chunk({dim: None})
     return da_nd.assign_coords({dim: range(len(das))})
 
 
 def convert_to_dem_3d(dem_raster: xr.DataArray, dim: str = "axis") -> xr.DataArray:
-    _, dem_raster_x = xr.broadcast(dem_raster, dem_raster.x)
-    dem_3d = make_nd_dataarray([dem_raster_x, dem_raster.y, dem_raster], dim=dim)
+    # DataArray and chunk work around: https://github.com/pydata/xarray/issues/6204
+    dem_x = dem_raster.x
+    dem_y = dem_raster.y
+    if dem_raster.chunks is not None:
+        dem_x = xr.DataArray(dem_raster.x).chunk()
+        dem_y = xr.DataArray(dem_raster.y).chunk()
+        dem_x, dem_y, _ = xr.unify_chunks(dem_x, dem_y, dem_raster)
+    # preserve dimension order of dem_3d as in dem_raster
+    _, dem_x = xr.broadcast(dem_raster, dem_x)
+    dem_3d = make_nd_dataarray([dem_x, dem_y, dem_raster], dim=dim)
     return dem_3d.rename("dem_3d")
 
 
